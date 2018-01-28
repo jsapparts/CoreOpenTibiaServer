@@ -5,6 +5,16 @@ namespace COTS.Infra.CrossCutting.Security
 {
     public class NetworkMessage
     {
+        public static Int32 NETWORKMESSAGE_MAXSIZE = 24590;
+
+        public static UInt16 INITIAL_BUFFER_POSITION = 8;
+        public static int HEADER_LENGTH = 2;
+        public static int CHECKSUM_LENGTH = 4;
+        public static int XTEA_MULTIPLE = 8;
+
+        public static int MAX_BODY_LENGTH = NETWORKMESSAGE_MAXSIZE - HEADER_LENGTH - CHECKSUM_LENGTH - XTEA_MULTIPLE;
+        public static int MAX_PROTOCOL_BODY_LENGTH = MAX_BODY_LENGTH - 10;
+
         #region Properties
         private int _length;
         /// <summary>
@@ -57,7 +67,7 @@ namespace COTS.Infra.CrossCutting.Security
         public NetworkMessage()
         {
             _length = 0;
-            _position = 6;
+            _position = 0;
             _buffer = new byte[Constants.NetworkMessageSizeMax];
             _key = new uint[4];
         }
@@ -68,7 +78,7 @@ namespace COTS.Infra.CrossCutting.Security
         public NetworkMessage(byte[] buffer)
         {
             _length = buffer.Length;
-            _position = 6;
+            _position = 0;
             _buffer = buffer;
             _key = new uint[4];
         }
@@ -79,7 +89,7 @@ namespace COTS.Infra.CrossCutting.Security
         public NetworkMessage(NetworkStream fileStream)
         {
             _length = Convert.ToInt32(fileStream.Length);
-            _position = 6;
+            _position = 0;
             _buffer = new byte[_length];
 
             fileStream.Read(_buffer, 0, _length);

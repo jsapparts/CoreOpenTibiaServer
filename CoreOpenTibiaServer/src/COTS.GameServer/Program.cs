@@ -45,11 +45,16 @@ namespace COTS.GameServer {
         private static void RunWithSucessfullyParsedCommandLineArguments(CommandLineArguments commandLineArguments)
         {
             _serviceProvider.GetService<LuaManager>().Run();
-            _serviceProvider.GetService<ProtocolLogin>().StartListening();
-            _serviceProvider.GetService<ProtocolGame>().StartListening();
+            //_serviceProvider.GetService<ProtocolLogin>().StartListening();
+            //_serviceProvider.GetService<ProtocolGame>().StartListening();
 
             //var clientConnectionManager = commandLineArguments.GetClientConnectionManager();
             //Task.Run(() => clientConnectionManager.StartListening());
+            NetworkManager nm = new NetworkManager();
+            nm.Start();
+            Console.WriteLine("NON BLOCKING");
+            //System.Threading.Thread.Sleep(3000);
+            //nm.Close();
         }
 
         private static void ReportCommandLineParsingError(NotParsed<CommandLineArguments> failedAttempt) {
@@ -59,9 +64,9 @@ namespace COTS.GameServer {
         public static void ConfigureLocalServices(IServiceCollection serviceCollection)
         {
             serviceCollection.AddTransient<LuaManager>();
-            serviceCollection.AddTransient<ConnectionManager>();
-            serviceCollection.AddTransient<ProtocolLogin>();
-            serviceCollection.AddTransient<ProtocolGame>();
+            //serviceCollection.AddSin<ConnectionManager>();
+            //serviceCollection.AddTransient<ProtocolLogin>();
+            //serviceCollection.AddTransient<ProtocolGame>();
         }
     }
 }

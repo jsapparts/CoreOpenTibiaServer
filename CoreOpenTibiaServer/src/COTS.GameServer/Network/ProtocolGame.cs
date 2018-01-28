@@ -1,52 +1,33 @@
-﻿using System;
-using System.Net;
-using System.Net.Sockets;
-using COTS.Domain.Interfaces.Services;
+using System;
+
+using COTS.Infra.CrossCutting.Security;
 
 namespace COTS.GameServer.Network
 {
-    public class ProtocolGame
+    class ProtocolGame : Protocol
     {
-        private readonly TcpListener _gameListener;
-        private readonly IPlayerService _playerService;
-        private readonly IAccountService _accountService;
+        public override String GetProtocolName() => "ProtocolGame";
 
-        public ProtocolGame(IPlayerService playerService, IAccountService accountService)
+        public override Byte getProtocolID() => 2;
+
+        public override bool ServerSendFirst() => false;
+
+        public override void onReceiveMsg(NetworkMessage msg)
         {
-            _playerService = playerService;
-            _accountService = accountService;
-            _gameListener = new TcpListener(IPAddress.Any, 7172);
+            Console.WriteLine("Received msg in " + GetProtocolName());
         }
 
-        public void StartListening()
+        public override void onReceiveFirstMsg(NetworkMessage msg)
         {
-            try
-            {
-                Console.WriteLine("Game server online!");
+            Console.WriteLine("Received first msg in " + GetProtocolName());
+            OS = msg.GetUInt16();
+            Version = msg.GetUInt16();
 
-                _gameListener.Start();
-                _gameListener.BeginAcceptSocket(GameListenerCallback, _gameListener);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.ToString());
-            }
-        }
+            msg.SkipBytes(7); // U32 client version, U8 client type, U16 dat revision
 
-        private void GameListenerCallback(IAsyncResult ar)
-        {
-            try
-            {
-                var connection = new ConnectionManager(_playerService, _accountService);
-                connection.GameListenerCallback(ar);
-
-                _gameListener.BeginAcceptSocket(GameListenerCallback, _gameListener);
-                Console.WriteLine("New client connected to game server.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
+            Console.WriteLine("Pos:" + msg.Position);
+            XTeaKey = GetXTEAKey();
+            Console.WriteLine("Pos: " + msg.Position);
         }
     }
 }
