@@ -36,7 +36,8 @@ namespace COMMO.GameServer.World.TFSLoading {
 			if (serializedWorldData.Length < MinimumWorldSize)
 				throw new TFSWorldLoadingException();
 
-			var otbTree = ExtractOTBTree(serializedWorldData);
+			//var otbTree = ExtractOTBTree(serializedWorldData);
+			var otbTree = new OTBTreeBuilder(serializedWorldData).BuildTree();
 			var world = new World();
 
 			ParseOTBTreeRootNode(otbTree, world);
@@ -53,7 +54,7 @@ namespace COMMO.GameServer.World.TFSLoading {
 			if (rootNode.Children.Count != 1)
 				throw new TFSWorldLoadingException();
 
-			var parsingStream = new OTBParsingStream(rootNode.Data.Span);
+			var parsingStream = new ReadOnlyMemoryStream(rootNode.Data.Span); //new OTBParsingStream(rootNode.Data.Span);
 
 			var headerVersion = parsingStream.ReadUInt32();
 			if (headerVersion == 0 || headerVersion > 2)
@@ -71,10 +72,10 @@ namespace COMMO.GameServer.World.TFSLoading {
 				throw new TFSWorldLoadingException();
 
 			Console.WriteLine($"OTBM header version: {headerVersion}");
-			Console.WriteLine($"World width: {parsingStream.ReadUInt16()}");
-			Console.WriteLine($"World height: {parsingStream.ReadUInt16()}");
-			Console.WriteLine($"Item encoding major version: {parsingStream.ReadUInt32()}");
-			Console.WriteLine($"Item encoding minor version: {parsingStream.ReadUInt32()}");
+			Console.WriteLine($"World width: {worldWidth}");
+			Console.WriteLine($"World height: {worldHeight}");
+			Console.WriteLine($"Item encoding major version: {itemEncodingMajorVersion}");
+			Console.WriteLine($"Item encoding minor version: {itemEncodingMinorVersion}");
 		}
 
 		private static void Parse(OTBNode worldDataNode, World world) {

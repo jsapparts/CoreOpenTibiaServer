@@ -5,11 +5,7 @@ namespace COMMO.GameServer {
 		public enum FileType { ITEMS_OTB, ITEMS_XML, MAP };
 		public enum Dir { DATA, ITEMS, MAP };
 
-		public static string BaseDirectory = Directory.GetParent(
-			Directory.GetParent(
-				Directory.GetCurrentDirectory()
-			).ToString()
-		).ToString() + "/";
+		public static string BaseDirectory = Directory.GetCurrentDirectory() + "/";
 
 		public static string GetDirectory(Dir dir) {
 			switch (dir) {

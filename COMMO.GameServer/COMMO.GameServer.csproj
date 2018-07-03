@@ -4,29 +4,18 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.0</TargetFramework>
     <Platforms>x64</Platforms>
+    <LangVersion>7.2</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LangVersion>latest</LangVersion>
+    <LangVersion>7.2</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LangVersion>latest</LangVersion>
+    <LangVersion>7.2</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsAsErrors />
   </PropertyGroup>
-
-  <ItemGroup>
-    <Compile Remove="Items\DeprecatedItemGroupException.cs" />
-    <Compile Remove="Items\ItemAttribute.cs" />
-    <Compile Remove="Items\ItemGroup.cs" />
-    <Compile Remove="Items\ItemManager.cs" />
-    <Compile Remove="Items\ItemType.cs" />
-    <Compile Remove="Items\OTBAttributes.cs" />
-    <Compile Remove="Items\SharedItem.cs" />
-    <Compile Remove="Items\SharedItemAbilities.cs" />
-    <Compile Remove="Items\SharedItemFlags.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="MoonSharp" Version="2.0.0" />

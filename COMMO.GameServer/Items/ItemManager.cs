@@ -1,413 +1,495 @@
-using COMMO.GameServer.OTBParsing;
-using COMMO.GameServer.World.Loading;
 using System;
-using System.Collections.Generic;
-using System.Xml;
+using System.Diagnostics; // For Debug only. Remove later
 using System.Xml.Linq;
+using System.Collections.Generic;
+
+using COMMO.GameServer.OTBParsing;
+using COMMO.GameServer.World.TFSLoading;
 
 namespace COMMO.GameServer.Items {
+    public static class ItemManager {
+        private static List<IBaseItemPrototype> _items;
+        private static bool _loaded = false;
+        public const byte FirstItemId = 100;
 
-    public class ItemManager {
-        private static ItemManager _instance;
-
-        public static ItemManager GetInstance() {
-            if (_instance == null)
-                _instance = new ItemManager();
-
-            return _instance;
+        public static IBaseItemPrototype GetItemPrototype(ushort id) {
+            return _items != null && id < _items.Count ? _items[id - FirstItemId] : null;
         }
 
-        private ItemManager() {
-        } // Defeat Instantiation
+        public static int Count => _items != null ? _items.Count : 0;
 
-        private bool _loaded = false;
+        public static bool Loaded => _loaded;
 
-        public bool IsLoaded {
-            get { return _loaded; }
-        }
+        private static bool HasFlag(uint flags, uint flag) {
+			return (flags & flag) != 0;
+		}
 
-        private UInt32 _majorVersion = 0;
-        private UInt32 _minorVersion = 0;
-        private UInt32 _buildVersion = 0;
-
-        private List<Item> _items = new List<Item>();
-        private List<SharedItem> _sharedItems;
-
-        public Item GetItem(ushort uid) {
-            return _items[uid];
-        }
-
-        public SharedItem GetSharedItem(ushort id) // Returns readOnly
-        {
-            if (id < 100 || id > _sharedItems.Capacity + 100)
-                return null;
-
-            return _sharedItems.AsReadOnly()[id - 100]; //_sharedItems[id]; // Maybe not the best way // NOT WORK
-        }
-
-        public bool PushItem(Item item) // This is to push item to be handled by the itemmanager
-        {
-            if (item == null) /// Maybe just create a CreateItem function here or something like that
-                return false;
-
-            //if(item.ID > _items.Length)
-            //{ /* Resize _items to insert a new element */ }
-
-            return (_items[item.ID] = item) == item;
-        }
-
-        public int GetSharedItemCount() => _sharedItems != null ? _sharedItems.Count : 0;
-
-        public void LoadItems() {
-            LoadFromOTB(FileManager.GetFilePath(FileManager.FileType.ITEMS_OTB));
-            LoadFromXML(FileManager.GetFilePath(FileManager.FileType.ITEMS_XML));
+        public static void LoadItems() {
+            LoadItemsFromOTB(FileManager.GetFilePath(FileManager.FileType.ITEMS_OTB));
+            LoadItemsFromXML(FileManager.GetFilePath(FileManager.FileType.ITEMS_XML));
             _loaded = true;
         }
 
-        private void LoadFromXML(string path) // For now lets use XML
-        {
+
+        private static void LoadItemsFromOTB(string path) {
+            var data = FileManager.ReadFileToByteArray(path);
+            var tree = new OTBTreeBuilder(data).BuildTree();
+
+
+            // SKIP to nodes
+
+            _items = new List<IBaseItemPrototype>(30000);
+
+            foreach (var itemNode in tree.Children) {
+                var itemStream = new ReadOnlyMemoryStream(itemNode.Data.Span);
+
+                var flags = itemStream.ReadUInt32();
+
+                ushort serverId = 0;
+                ushort clientId = 0;
+                ushort wareId = 0;
+                ushort speed = 0;
+                byte lightLevel = 0;
+                byte lightColor = 0;
+                byte topOrder = 0;
+
+				var toSkip = 0;
+				bool escaped = false;
+                while (!itemStream.IsOver) {
+					var attr = itemStream.ReadByte();
+					var isEscape = (OTBMarkupByte)attr == OTBMarkupByte.Escape;
+					if (toSkip > 0) {
+						if (isEscape) {
+							if (escaped) {
+								toSkip++;
+								escaped = false;
+							} else {
+								toSkip--;
+								escaped = true;
+							}
+						} else {
+							toSkip--;
+						}
+
+						if (toSkip == 0)
+							break;
+
+						continue;
+					}
+
+                    var dataSize = itemStream.ReadUInt16();
+
+                    switch(attr) {
+                        case 0x10: // ServerID 0x10 = 16
+                        serverId = itemStream.ReadUInt16();
+                        break;
+
+                        case 0x11: // ClientID 0x11 = 17
+                        clientId = itemStream.ReadUInt16();
+                        break;
+
+                        case 0x14: // Speed 0x14 = 20
+                        speed = itemStream.ReadUInt16();
+                        break;
+
+                        case 0x2A: // LightBlock 0x2A = 42
+                        lightLevel = (byte) itemStream.ReadUInt16();
+                        lightColor = (byte) itemStream.ReadUInt16();
+                        break;
+
+                        case 0x2B: // TopOrder 0x2B = 43
+                        topOrder = itemStream.ReadByte();
+                        break;
+
+                        case 0x2D: // WareID 0x2D = 45
+                        wareId = (byte) itemStream.ReadUInt16();
+                        break;
+
+                        default:
+						toSkip = dataSize;
+                        break;
+                    }
+                }
+                var blockSolid = HasFlag(flags, 1 << 0);
+                var blockProjectile = HasFlag(flags, 1 << 1);
+                var blockPathFind = HasFlag(flags, 1 << 2);
+                //var hasElevation = HasFlag(flags, 1 << 3); // Irrelevant
+                var isUsable = HasFlag(flags, 1 << 4);
+                var isPickupable = HasFlag(flags, 1 << 5);
+                var isMoveable = HasFlag(flags, 1 << 6);
+                //var isStackable = HasFlag(flags, 1 << 7);
+                var alwaysOnTop = HasFlag(flags, 1 << 13); // Maybe irrelevant
+                var isReadable = HasFlag(flags, 1 << 14);
+                var isRotatable = HasFlag(flags, 1 << 15);
+                var isHangable = HasFlag(flags, 1 << 16);
+                var isVertical = HasFlag(flags, 1 << 17);
+                var isHorizontal = HasFlag(flags, 1 << 18);
+                var allowDistRead = HasFlag(flags, 1 << 20);
+                var lookTrough = HasFlag(flags, 1 << 21);
+                var isAnimation = HasFlag(flags, 1 << 22); // Maybe irrelevant too?
+
+                IBaseItemPrototype item = null;
+                if (!isPickupable) {// A world item
+                    item = new WorldItemPrototype(serverId, clientId, isUsable,
+                                isMoveable, blockSolid, lookTrough, blockPathFind, blockProjectile);
+                } else {// An item
+                    item = new ItemPrototype(serverId, clientId, isUsable);
+                }
+
+                if(item != null)
+                    _items.Add(item);
+            }
+
+            _items.TrimExcess();
+        }
+
+        private static Dictionary<string, string> properties = new Dictionary<string, string>(); // This is a cache to all xml key-value properties
+        private static void LoadItemsFromXML(string path) {
             var rootElement = XElement.Load(path, LoadOptions.SetLineInfo);
+
             if (rootElement.Name != "items")
-                throw new MalformedWorldException(); // Just for now
+                return;
 
-            foreach (var element in rootElement.Elements()) {
-                var firstAttr = element.FirstAttribute; //Maybe just check element.Attribute(name) != null
-                var secondAttr = element.FirstAttribute.NextAttribute;
-                var multiple = firstAttr.Name == "fromid" && secondAttr.Name == "toid";
-
-                if (element.Name != "item" || (firstAttr.Name != "id" && !multiple))
+            foreach (var rootChild in rootElement.Elements()) {
+                if (rootChild.Name != "item")
                     continue;
 
-                var iValues = new int[2]; // Maybe change this
-                if (!int.TryParse(firstAttr.Value, out iValues[0])
-                    || (multiple && !int.TryParse(secondAttr.Value, out iValues[1])))
+                if (rootChild.Attribute("id") == null
+                    && (rootChild.Attribute("fromid") == null || rootChild.Attribute("toid") == null))
                     continue;
 
-                var max = GetSharedItemCount();
-                if ((!multiple && (iValues[0] < 100 || iValues[0] > max) || (multiple
-                    && (iValues[0] < 100 || iValues[1] > max))))
-                    continue; // Invalid range id
+                var multiple = rootChild.Attribute("id") == null;
+                ushort id = 0;
+                ushort count = 1;
+                if (multiple) {
+                    if (!ushort.TryParse(rootChild.Attribute("fromid").Value, out id)
+                        || !ushort.TryParse(rootChild.Attribute("toid").Value, out count))
+                        continue;
 
-                var items = _sharedItems.GetRange(iValues[0] - 100, (!multiple ? 1 : iValues[1] - iValues[0] + 1)); // Maybe - 100 its not working as should. Check it on load OTB, the first 100 elements
-                foreach (var item in items) {
-                    foreach (var attribute in element.Attributes()) {
-                        if (attribute.Name == "name")
-                            item.Name = attribute.Value;
-                        else if (attribute.Name == "article")
-                            item.Article = attribute.Value;
-                        else if (attribute.Name == "plural")
-                            item.PluralName = attribute.Value;
+                    if (id > count) {
+                        var b = count; count = id; id = b;
                     }
 
-                    foreach (var child in element.Elements()) {
-                        if (child.Name != "attribute")
+                    count -= id;
+                } else {
+                    if (!ushort.TryParse(rootChild.Attribute("id").Value, out id))
+                        continue;
+                }
+
+                if (id > _items.Count || id + count > _items.Count)
+                    continue;
+
+                List<IBaseItemPrototype> items = _items.GetRange(id - FirstItemId, count);
+                foreach (var item in items) {
+                    var _item = item;
+                    foreach (var attribute in rootChild.Attributes()) {
+                        if (attribute.Name == "name")
+                            _item.Name = attribute.Value;
+                        else if (attribute.Name == "article")
+                            _item.Article = attribute.Value;
+                        else if (attribute.Name == "plural")
+                            _item.Plural = attribute.Value;
+                        // Don't send warning. Just get what we support it's better to do here
+                    }
+
+                    properties.Clear();
+                    foreach (var child in rootChild.Elements()) {
+                        var key = child.Attribute("key");
+                        var value = child.Attribute("value");
+
+                        if (key == null || value == null)
                             continue;
 
-                        var key = child.FirstAttribute;
-                        var value = key.NextAttribute;
-                        if (key.Name != "key" || value.Name != "value")
+                        if (!properties.ContainsKey(key.Value.ToLower()))
+                            properties.Add(key.Value.ToLower(), value.Value);
+                    }
+
+                    ParseBasic(ref _item);
+                    ParseContainerComponent(ref _item);
+
+                    if (ParseItem(ref _item)) {
+                        if (ParseEquipableComponent(ref _item)) {
+                            ParseMeeleWeaponComponent(ref _item);
+                        }
+                        //if (ParseEquipableComponent(ref _item))
+                            //continue;
+
+                        //continue;
+                    }
+
+                    if (ParseWorldItem(ref _item)) {
+                        //continue;
+                    }
+
+                    /*
+                    foreach (var child in rootChild.Elements()) {
+                        var key = child.Attribute("key");
+                        var value = child.Attribute("value");
+
+                        if (key == null || value == null)
                             continue;
 
-                        switch (key.Value) {// Maybe use key.Value.asLower and compare this way. Simple and better to peoples. Why force this?
+                        switch(key.Value.ToLower()) {
                             case "description":
-                            item.Description = value.Value;
+                            _item.Description = value.Value;
                             break;
 
-                            case "type":
-                            item.Type = value.Value;
-                            break;
-
-                            case "floorchange":
-                            case "floorChange":
-                            item.FloorChange = value.Value;
-                            break;
-
-                            case "effect":
-                            item.Effect = value.Value;
-                            break;
-
-                            case "field":
-                            item.Field = value.Value;
-                            break;
-
-                            case "fluidsource":
-                            case "fluidSource":
-                            item.FluidSource = value.Value;
-                            break;
-
-                            case "weaponType":
-                            item.WeaponType = value.Value;
-                            break;
-
-                            case "shootType":
-                            item.ShootType = value.Value;
-                            break;
-
-                            case "ammoType":
-                            item.AmmoType = value.Value;
-                            break;
-
-                            case "partnerDirection":
-                            item.PartnerDirection = value.Value;
-                            break;
-
-                            case "corpseType":
-                            item.CorpseType = value.Value;
-                            break;
-
-                            case "slotType":
-                            item.SlotType = value.Value;
-                            break;
-
-                            case "containerSize":
-                            ParseByte(ref item.ContainerSize, value);
-                            break;
-                            // TODO: Continue and do the rest use the parse methods too
-                            case "decayTo":
-                            ParseUShort(ref item.DecaytTo, value);
-                            break;
-
-                            case "rotateTo":
-                            ParseUShort(ref item.RotateTo, value);
-                            break;
-
-                            case "destroyTo":
-                            ParseUShort(ref item.DestroyTo, value);
-                            break;
-
-                            case "writeOnceItemId":
-                            ushort.TryParse(value.Value, out item.WriteOnceItemId);
-                            break;
-
-                            case "maleSleeper":
-                            ushort.TryParse(value.Value, out item.MaleSleeperId);
-                            break;
-
-                            case "femaleSleeper":
-                            ushort.TryParse(value.Value, out item.FemaleSleeperId);
-                            break;
-
-                            case "maxTextLen":
-                            case "maxTextLength":
-                            ushort.TryParse(value.Value, out item.MaxTextLength);
-                            break;
-
-                            case "attack":
-                            ushort.TryParse(value.Value, out item.Attack);
-                            break;
-
-                            case "defense":
-                            ushort.TryParse(value.Value, out item.Defense);
-                            break;
-
-                            case "maxHitChance":
-                            ushort.TryParse(value.Value, out item.MaxHitChance);
-                            break;
-
-                            case "range":
-                            ushort.TryParse(value.Value, out item.Range);
-                            break;
-
-                            case "leveldoor":
-                            case "levelDoor":
-                            ushort.TryParse(value.Value, out item.LevelDoor);
-                            break;
-
-                            case "weight":
-                            uint.TryParse(value.Value, out item.Weight);
+                            case "decayto":
+                            _item.DecayInfo = new DecayInfo(true, ushort.Parse(value.Value));
                             break;
 
                             case "duration":
-                            uint.TryParse(value.Value, out item.Duration);
+                            _item.DecayInfo = new DecayInfo(true, _item.DecayInfo.DecayTo, uint.Parse(value.Value));
                             break;
 
-                            case "damage":
-                            uint.TryParse(value.Value, out item.Damage);
-                            break;
-
-                            case "damageTicks":
-                            uint.TryParse(value.Value, out item.DamageTicks);
-                            break;
-
-                            case "damageCount":
-                            uint.TryParse(value.Value, out item.DamageCount);
-                            break;
-
-                            case "damageStart":
-                            uint.TryParse(value.Value, out item.DamageStart);
-                            break;
-
-                            case "writeable":
-                            bool.TryParse(value.Value, out item.IsWriteable);
-                            break;
-
-                            case "replaceable":
-                            bool.TryParse(value.Value, out item.IsRepleaceable);
-                            break;
-
-                            case "allowDistRead":
-                            bool.TryParse(value.Value, out item.AllowDistRead);
-                            break;
-
-                            case "allowpickupable":
-                            case "allowPickupable":
-                            bool.TryParse(value.Value, out item.AllowPickupable);
-                            break;
-
-                            case "blocking":
-                            case "blockSolid":
-                            bool.TryParse(value.Value, out item.BlockSolid);
-                            break;
-
-                            case "blockprojectile":
-                            case "blockProjectile":
-                            bool.TryParse(value.Value, out item.BlockProjectile);
-                            break;
-
-                            case "walkStack":
-                            bool.TryParse(value.Value, out item.WalkStack);
-                            break;
-                            /// MAYBE CREATE A SetBool method to tryParse and output a warning if can't.Pass out and value
                             default:
-                            Console.WriteLine("[Items.XML] - Invalid attribute: " + key.Value);
-                            continue; // in future use a log to output as warning
+                            if (ParseItem(ref _item, child)) {
+                                // Already know that it is a Normal Item.
+                                // Now just keep trying to parse other things of this type of item
+                                // As equips, runes and so on.
+                                // If parse a rune use continue to ignore others parses for example
+                                // This last constinue make it not waste time parsing world things
+                                continue;
+                            }
+
+                            if (ParseWorldItem(ref _item, child)) {
+                                // Same as above. But with world items
+                                continue;
+                            }
+
+                            //---------------------------------------------------------
+                            // This is just to skip somethings. Remove later
+                            switch(key.Value.ToLower()) { // Use this to skip some attribute we don't want now
+                            case "type": // We already now the type in the way it is now?
+                            case "fluidsource": // Used with vials, could be in script
+                            case "corpsetype": // Is not really used for nothing
+                            case "floorchange":
+                            case "pickupable" : // Ignore. Already defined by OTB
+                            case "effect" : // Should not be in script? Scripts should be easy
+                            continue;
+                            }
+
+                            Debug.WriteLine(key.Value + " is not a valid attribute . [Value:" + value.Value + "]");
+                            // If reach this point the attribute is unknow. Show warning
+                            //----------------------------------------------------------
+
+                            break;
                         }
                     }
-                    _sharedItems[item.Id - 100] = item;
+                    */
+                    _items[_item.ServerID - FirstItemId] = _item;
                 }
             }
         }
 
-        private void ShowParseWarning(XAttribute attr, String type) {
-            var lineInfo = (IXmlLineInfo)attr;
-            var info = "";
-            if (lineInfo.HasLineInfo())
-                info = "at " + lineInfo.LineNumber + ":" + lineInfo.LinePosition;
-
-            Console.WriteLine("[Items.XML] " + info + " - Invalid type in " + attr.Name
-                + " = " + attr.Value + ". Expected " + type);
+        private static string TryGetValue(string key, ref bool modified) {
+            bool hasKey = ((properties != null) && (properties.ContainsKey(key.ToLower())));
+            if (hasKey && !modified)
+                modified = true;
+            return hasKey ? properties[key.ToLower()] : string.Empty;
         }
 
-        private void ParseBool(ref bool value, XAttribute attr) {
-            if (attr.Value == "0" || attr.Value == "1")
-                value = (attr.Value == "1" ? true : false);
-            else if (!bool.TryParse(attr.Value, out value))
-                ShowParseWarning(attr, "Boolean");
+        private static bool TryGetBool(string key, ref bool modified) {
+            bool value = false;
+            string str_value = TryGetValue(key, ref modified);
+            if (!bool.TryParse(str_value, out value))
+                modified = value = (str_value == "1" ? true : false);
+
+            return value;
         }
 
-        private void ParseUInt(ref uint value, XAttribute attr) {
-            if (!uint.TryParse(attr.Value, out value))
-                ShowParseWarning(attr, "UInt32");
+        private static int TryGetInt(string key, ref bool modified) {
+            int value = 0;
+            int.TryParse(TryGetValue(key, ref modified), out value);
+
+            return value;
         }
 
-        private void ParseUShort(ref ushort value, XAttribute attr) {
-            if (!ushort.TryParse(attr.Value, out value))
-                ShowParseWarning(attr, "UInt16");
+        private static uint TryGetUInt(string key, ref bool modified) {
+            uint value = 0;
+            uint.TryParse(TryGetValue(key, ref modified), out value);
+
+            return value;
         }
 
-        private void ParseByte(ref byte value, XAttribute attr) {
-            if (!byte.TryParse(attr.Value, out value))
-                ShowParseWarning(attr, "Byte");
+        private static ushort TryGetUShort(string key, ref bool modified) {
+            ushort value = 0;
+            ushort.TryParse(TryGetValue(key, ref modified), out value);
+
+            return value;
         }
 
-        private void LoadFromOTB(string path) {
-            var data = FileManager.ReadFileToByteArray(path);
-            var parsingTree = TFSWorldLoader.ParseWorld(data);
+        private static void ParseBasic(ref IBaseItemPrototype item) {
+            bool modified = false;
+            string description = TryGetValue("description", ref modified);
+            uint duration = TryGetUInt("duration", ref modified);
+            ushort toId = TryGetUShort("decayTo", ref modified);
+            ushort maxTextLen = TryGetUShort("maxTextLen", ref modified);
+            ushort writeOnceId = TryGetUShort("writeOnceItemId", ref modified);
 
-            var rootNode = parsingTree.Root;
-            var stream = new OTBNodeParsingStream(parsingTree, rootNode);
-
-            ParseOTBVersion(ref stream);
-            _sharedItems = new List<SharedItem>(rootNode.Children.Count);
-
-            foreach (var itemNode in rootNode.Children) {
-                var itemStream = new OTBNodeParsingStream(parsingTree, itemNode);
-                ParseItemNode(ref itemStream);
-            }
-            _sharedItems.TrimExcess();
-        }
-
-        private void ParseOTBVersion(ref OTBNodeParsingStream stream) {
-            stream.UnderlayingStream.Skip(4); // Skip flags
-            var attr = (OTBAttributes)stream.ReadByte();
-            if (attr == OTBAttributes.ROOT_VERSION) {
-                var dataSize = stream.ReadUInt16();
-                if (dataSize != 140) // VersionInfo : 4 UInt32(4bytes) = 12 + 128 * 1 byte = 140
-                    throw new MalformedWorldException(); // Lets use this for now
-
-                _majorVersion = stream.ReadUInt32(); // Otb version
-                _minorVersion = stream.ReadUInt32(); // Client version
-                _buildVersion = stream.ReadUInt32(); // Build version
-                stream.UnderlayingStream.Skip(128); // Skip CSD version
+            if (modified) {
+                item.Description = description;
+                item.DecayInfo = new DecayInfo(toId != 0 && duration != 0, toId, duration);
+                item.WriteInfo = new WriteInfo(maxTextLen > 0, writeOnceId, maxTextLen);
             }
         }
 
-        private void ParseItemNode(ref OTBNodeParsingStream stream) {
-            var flags = (SharedItemFlags)stream.ReadUInt32();
-            var item = new SharedItem(flags);
+        private static bool ParseItem(ref IBaseItemPrototype item) {
+            bool modified = false;
 
-            while (!stream.IsOver) {
-                var attr = (OTBAttributes)stream.ReadByte();
-                var dataSize = stream.ReadUInt16();
+            int weight = TryGetInt("weight", ref modified);
 
-                switch (attr) {
-                    case OTBAttributes.ITEM_SERVERID:
-                    if (dataSize != sizeof(UInt16))
-                        throw new MalformedItemNodeException();
-
-                    item.Id = stream.ReadUInt16();
-
-                    if (item.Id > 30000 && item.Id < 30100)
-                        item.Id -= 30000; // Correct ID in wrong range I guess
-
-                    break;
-
-                    case OTBAttributes.ITEM_CLIENTID:
-                    if (dataSize != sizeof(UInt16))
-                        throw new MalformedItemNodeException();
-
-                    item.ClientId = stream.ReadUInt16();
-                    break;
-
-                    case OTBAttributes.ITEM_SPEED:
-                    if (dataSize != sizeof(UInt16))
-                        throw new MalformedItemNodeException();
-
-                    item.Speed = stream.ReadUInt16();
-                    break;
-
-                    case OTBAttributes.ITEM_LIGHT2:
-                    if (dataSize != 2 * sizeof(UInt16)) // 2 UInt16 = 4 bytes
-                        throw new MalformedItemNodeException();
-
-                    item.LightLevel = (Byte)stream.ReadUInt16(); // Read UInt16
-                    item.LightColor = (Byte)stream.ReadUInt16(); // But range is only to 255
-                    break;
-
-                    case OTBAttributes.ITEM_TOPORDER:
-                    if (dataSize != sizeof(Byte))
-                        throw new MalformedItemNodeException();
-
-                    item.AlwaysOnTopOrder = stream.ReadByte();
-                    break;
-
-                    case OTBAttributes.ITEM_WAREID:
-                    if (dataSize != sizeof(UInt16))
-                        throw new MalformedItemNodeException();
-
-                    item.WareId = stream.ReadUInt16();
-                    break;
-
-                    default:
-                    stream.Skip(dataSize);
-                    break;
-                }
+            if (modified) {
+                item = new ItemPrototype(item, weight);
             }
 
-            if (item.Id > _sharedItems.Capacity + 100 || item.Id < 100)
-                throw new IndexOutOfRangeException();
-
-            _sharedItems.Insert(item.Id - 100, item);
+            return modified;
         }
+
+        private static bool ParseWorldItem(ref IBaseItemPrototype item) {
+            bool modified = false;
+
+            ushort destroyTo = TryGetUShort("destroyTo", ref modified);
+            ushort rotateTo = TryGetUShort("rotateTo", ref modified);
+            ushort transformTo = TryGetUShort("transformTo", ref modified);
+            bool blockprojectile = TryGetBool("blockProjectile", ref modified);
+
+            if (modified) {
+                item = new WorldItemPrototype(item, destroyTo, rotateTo, transformTo, blockprojectile);
+            }
+
+            return modified;
+        }
+
+        private static bool ParseContainerComponent(ref IBaseItemPrototype item) {
+            bool modified = false;
+
+            byte size = (byte) TryGetUShort("containerSize", ref modified);
+
+            if (modified) {
+                item.ItemComponent = new ContainerComponent(size);
+            }
+
+            return modified;
+        }
+
+        private static bool ParseEquipableComponent(ref IBaseItemPrototype item) {
+            bool modified = false;
+
+            uint level = TryGetUInt("requiredLevel", ref modified);
+            ushort defense = TryGetUShort("defense", ref modified);
+
+            if (modified) {
+                item.ItemComponent = new EquipableComponent(defense : defense, minLevel: level);
+            }
+
+            return modified;
+        }
+
+        private static bool ParseMeeleWeaponComponent(ref IBaseItemPrototype item) {
+            bool modified = false;
+
+            uint attack = TryGetUInt("attack", ref modified);
+
+            if (modified) {
+                var equip = item.ItemComponent as EquipableComponent;
+                item.ItemComponent = new MeleeWeaponComponent(equip, 1, 1, attack);
+            }
+
+            return modified;
+        }
+
+        /*
+        private static bool ParseItem(ref IBaseItemPrototype item, XElement element) {
+            var itProto = new ItemPrototype(item);
+
+            var key = element.Attribute("key");
+            var value = element.Attribute("value");
+            var modified = true;
+            switch(key.Value.ToLower()) {
+                case "weight":
+                itProto.Weight = int.Parse(value.Value);
+                //ItemManager.SetItemIntegerProperty(int.Parse(value.Value))
+                break;
+
+                default:
+                modified = false;
+                break;
+            }
+
+            if (modified)
+                item = itProto;
+
+            return modified;
+        }
+
+        private static bool ParseItem() {
+            // interate over the childs with name attribute
+            // switch on keys
+            // map values to dict
+            // if some property was caught, then return a new instance with dict properties or default
+            // else don't change the ref item and return false
+            return false;
+        }
+
+        private static bool ParseWorldItem(ref IBaseItemPrototype item, XElement element) {
+            var itProto = new WorldItemPrototype(item);
+
+            var key = element.Attribute("key");
+            var value = element.Attribute("value");
+            var modified = true;
+            switch(key.Value.ToLower()) {
+                case "blocking":
+                itProto.BlockSolid = true;
+                break;
+
+                case "blockprojectile":
+                itProto.BlockProjectile = true;
+                break;
+
+                default:
+                modified = false;
+                break;
+            }
+
+            if (modified)
+                item = itProto;
+
+            return modified;
+        }
+
+        private static bool ParseEquipableComponent(ref ItemPrototype prototype, XElement element) {
+            var component = new EquipableComponent();
+
+            var key = element.Attribute("key");
+            var value = element.Attribute("value");
+            var modified = true;
+            switch(key.Value.ToLower()) {
+                case "":
+                component = new EquipableComponent(component.Slot, ushort.Parse(value.Value), component.MinimumRequiredLevel);
+                break;
+
+                default:
+                modified = false;
+                break;
+            }
+
+            return modified;
+        }
+        */
+
+		public static Item createItem(UInt16 protoId) {
+			var proto = GetItemPrototype(protoId);
+			if (proto != null) {
+				var component = proto.ItemComponent as ContainerComponent;
+				if (component != null)
+					return new Container(protoId);
+				else
+					return new Item(protoId);
+			}
+
+			return null;
+		}
+
     }
 }

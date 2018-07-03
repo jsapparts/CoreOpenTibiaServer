@@ -1,3 +1,5 @@
+using System;
+
 namespace COMMO.GameServer.World {
 
 	public sealed class QuadTree {
@@ -69,10 +71,21 @@ namespace COMMO.GameServer.World {
 		/// else	      <paramref name="x"/> &lt  0 and <paramref name="y"/> &lt  0, return 2
 		/// </remarks>
 		public static int ComputeChildrenIndex(int x, int y) {
-			return
+			if (x >= 0 && y >= 0)
+				return 0;
+			else if (x <= 0 && y >= 0)
+				return 1;
+			else if (x <= 0 && y <= 0)
+				return 2;
+			else if (x == 0 && y <= 0)
+				return 3;
+
+			return 0;
+
+			/* return
 				((x & SignalBit) >> XRightShift)
 				|
-				((y & SignalBit) >> YRightShift);
+				((y & SignalBit) >> YRightShift); */
 		}
 	}
 }
