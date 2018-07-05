@@ -37,7 +37,7 @@ namespace COMMO.GameServer.World.TFSLoading {
 
 				switch (currentMark) {
 					case OTBMarkupByte.Start:
-					treeBuilder.AddNodeDataBegin(
+					treeBuilder.AddNodeBegin(
 						start: stream.Position,
 						type: nodeType);
 					break;

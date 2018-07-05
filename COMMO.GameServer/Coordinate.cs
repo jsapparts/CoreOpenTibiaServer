@@ -70,7 +70,7 @@ namespace COMMO.GameServer {
 		/// Creates a new <see cref="Coordinate"/> whose coordinates are equal to this instance's
 		/// plus the provided offesets.
 		/// </summary>
-		public Coordinate Translate(int xOffset, int yOffset) => Translate(xOffset: xOffset, yOffset: yOffset, zOffset: Z);
+		public Coordinate Translate(int xOffset, int yOffset) => Translate(xOffset: xOffset, yOffset: yOffset, zOffset: 0);
 
 		/// <summary>
 		/// Creates a new <see cref="Coordinate"/> whose coordinates are equal to this instance's

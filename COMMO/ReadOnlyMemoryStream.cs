@@ -38,7 +38,12 @@ namespace COMMO {
 				throw new InvalidOperationException();
 
 			for(int i=0; i < sizeof(UInt16); i++) {
-				_parsingBuffer[i] = _buffer[Position];
+				var _byte = _buffer[Position];
+				if(_byte == 0xFD) { // Escape
+					Position ++;
+					_byte = _buffer[Position];
+				}
+				_parsingBuffer[i] = _byte;
 				Position++;
 			}
 
@@ -50,7 +55,12 @@ namespace COMMO {
 				throw new InvalidOperationException();
 
 			for (int i = 0; i < sizeof(UInt32); i++) {
-				_parsingBuffer[i] = _buffer[Position];
+				var _byte = _buffer[Position];
+				if(_byte == 0xFD) { // Escape
+					Position ++;
+					_byte = _buffer[Position];
+				}
+				_parsingBuffer[i] = _byte;
 				Position++;
 			}
 

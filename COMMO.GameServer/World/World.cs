@@ -11,11 +11,27 @@ namespace COMMO.GameServer.World {
 
 		private readonly QuadTree _quadTree;
 
+		public World() {
+			_quadTree = new QuadTree();
+		}
+
 		public void AddTile(Tile tile) {
 			if (tile == null)
 				throw new ArgumentNullException(nameof(tile));
 
-			throw new NotImplementedException();
+			var leafNode = _quadTree.CreateLeafOrGetReference(tile.Position.X, tile.Position.Y);
+
+			var floor = leafNode.CreateFloorOrGetReference(tile.Position.Z);
+
+			ushort xOffset = (ushort)(tile.Position.X & Floor.FloorDiameter);
+			ushort yOffset = (ushort)(tile.Position.Y & Floor.FloorDiameter);
+
+			var oldTile = floor.Tiles.Get(xOffset, yOffset);
+			if (oldTile == null) {
+				floor.Tiles.Set(tile.Position.X, tile.Position.Y, tile);
+			}
+
+			//throw new NotImplementedException();
 			//var leafNode = RootQuadTreeNode.CreateLeafOrGetReference(x, y, WorldHighestLayer);
 
 			//UpdateNeighbors(x, y, leafNode);

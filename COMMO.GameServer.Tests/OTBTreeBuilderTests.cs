@@ -88,7 +88,7 @@ namespace COMMO.GameServer.Tests {
 					break;
 
 					case OTBMarkupByte.Start:
-					treeBuilder.AddNodeDataBegin(i + 1, OTBNodeType.NotSetYet);
+					treeBuilder.AddNodeBegin(i + 1, OTBNodeType.NotSetYet);
 					break;
 
 					case OTBMarkupByte.End:

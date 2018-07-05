@@ -18,7 +18,7 @@ namespace COMMO.GameServer.OTBParsing {
 		}
 
 		/// <remarks>Start will be included in the data.</remarks>
-		public void AddNodeDataBegin(int start, OTBNodeType type) {
+		public void AddNodeBegin(int start, OTBNodeType type) {
 			if (start < 0 || start > _serializedTreeData.Length)
 				throw new ArgumentOutOfRangeException(nameof(start));
 
@@ -38,7 +38,6 @@ namespace COMMO.GameServer.OTBParsing {
 			if (end < 0 || end > _serializedTreeData.Length)
 				throw new ArgumentOutOfRangeException();
 
-			// Sanity checks
 			if (!_nodeStarts.TryPop(out var start))
 				throw new InvalidOperationException();
 			if (end < start)
@@ -47,7 +46,7 @@ namespace COMMO.GameServer.OTBParsing {
 			var data = new Memory<byte>(
 				array: _serializedTreeData,
 				start: start,
-				length: end - start);
+				length: end - start - 1);
 
 			// Checking if this node has children
 			if (!_childrenCounts.TryPop(out var childCount))
@@ -69,7 +68,41 @@ namespace COMMO.GameServer.OTBParsing {
 			_builtNodes.Push(node);
 		}
 
+		private void ExtractTree() {
+			var stream = new ReadOnlyMemoryStream(_serializedTreeData);
+
+			stream.Skip(4); // Skip indentifier
+			while (!stream.IsOver) {
+				var currentMark = (OTBMarkupByte)stream.ReadByte();
+				if (currentMark < OTBMarkupByte.Escape) {
+					// What is under Escape = 0xFD is just prop data. Just skip
+					continue;
+				}
+
+				switch(currentMark) {
+					case OTBMarkupByte.Start:
+					var nodeType = (OTBNodeType)stream.ReadByte();
+					AddNodeBegin(stream.Position, nodeType);
+					break;
+
+					case OTBMarkupByte.End:
+					AddNodeEnd(stream.Position);
+					break;
+
+					case OTBMarkupByte.Escape:
+					stream.Skip();
+					break;
+
+					default:
+					throw new InvalidOperationException();
+				}
+			}
+		}
+
 		public OTBNode BuildTree() {
+			if (_builtNodes.Count == 0)
+				ExtractTree();
+
 			if (_builtNodes.Count != 1)
 				throw new InvalidOperationException();
 			if (_nodeStarts.Count != 0)

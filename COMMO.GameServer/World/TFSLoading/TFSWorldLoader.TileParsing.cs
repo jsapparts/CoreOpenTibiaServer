@@ -13,7 +13,7 @@ namespace COMMO.GameServer.World.TFSLoading {
 			if (tileAreaNode.Type != OTBNodeType.TileArea)
 				throw new TFSWorldLoadingException();
 
-			var stream = new OTBParsingStream(tileAreaNode.Data.Span);
+			var stream = new ReadOnlyMemoryStream(tileAreaNode.Data.Span);
 
 			var areaStartX = stream.ReadUInt16();
 			var areaStartY = stream.ReadUInt16();
@@ -22,7 +22,7 @@ namespace COMMO.GameServer.World.TFSLoading {
 			var areaStartPosition = new Coordinate(
 				x: areaStartX,
 				y: areaStartY,
-				z: areaZ);
+				z: (sbyte) areaZ);
 
 			foreach (var tileNode in tileAreaNode.Children) {
 				ParseTileNode(
@@ -44,7 +44,7 @@ namespace COMMO.GameServer.World.TFSLoading {
 			if (tileNode.Type != OTBNodeType.HouseTile && tileNode.Type != OTBNodeType.NormalTile)
 				throw new TFSWorldLoadingException();
 
-			var stream = new OTBParsingStream(tileNode.Data.Span);
+			var stream = new ReadOnlyMemoryStream(tileNode.Data.Span);
 
 			// Finding the tiles "absolute coordinates"
 			var xOffset = stream.ReadUInt16();
@@ -72,18 +72,22 @@ namespace COMMO.GameServer.World.TFSLoading {
 					break;
 
 					case TFSWorldNodeAttribute.Item:
+					var itemId = stream.ReadUInt16();
+					tilesItems.Add(ItemManager.createItem(itemId));
 #warning Not implemented -- Halp Ratazana
 					break;
 
-					default:
-					throw new TFSWorldLoadingException("TFS just threw a exception here, so shall we.");
+					//default:
+					//throw new TFSWorldLoadingException("TFS just threw a exception here, so shall we.");
 				}
 
-				throw new NotImplementedException();
+				//throw new NotImplementedException();
 			}
 
 			// Parsing tile's items stored as child
 			foreach (var itemNode in tileNode.Children) {
+			var itemId = stream.ReadUInt16();
+			tilesItems.Add(ItemManager.createItem(itemId));
 #warning Not implemented -- Halp Ratazana
 			}
 
